@@ -369,7 +369,7 @@ function renderIntro(){
     <div class="card">
       <div class="eyebrow">LANGKAH 1 DARI 4</div>
       <h1 class="title">Sebelum mulai, kenalan dulu</h1>
-      <p class="lede">Kuisioner ini mengumpulkan penilaian Anda atas kriteria non-finansial (AHP) untuk memutuskan opsi investasi Gym Publik ISHAP — sebuah fasilitas kebugaran publik non-revenue seluas ±11.000 m². Jawaban Anda akan diproses menjadi bobot kriteria dan skor akhir tiap opsi.</p>
+      <p class="lede">Kuisioner ini mengumpulkan penilaian Anda atas kriteria non-finansial (AHP) untuk memutuskan opsi investasi Gym Publik ISHAP — sebuah fasilitas kebugaran publik non-revenue seluas ±800 m². Jawaban Anda akan diproses menjadi bobot kriteria dan skor akhir tiap opsi.</p>
 
       <label class="field-label">Nama Anda</label>
       <input id="inpName" type="text" placeholder="Tulis nama lengkap" value="${state.profile.name}">
@@ -563,30 +563,47 @@ function renderOptions(){
 }
 
 
+// Menghasilkan teks deskriptif untuk satu perbandingan berpasangan,
+// misal: "Kualitas Pengalaman Berlatih 3 poin lebih penting" atau "Sama penting"
+function pairwiseLabel(leftName, rightName, si){
+  const val = SCALE[si];
+  if(si === 4) return "Sama penting";
+  const winner = si < 4 ? leftName : rightName;
+  return `${winner} ${val} poin lebih penting`;
+}
+
 function buildSubmissionPayload(rows, scoreA, scoreB, CR){
-  return {
-    timestamp: new Date().toISOString(),
-    name: state.profile.name,
-    role: state.profile.role,
-    criteriaAnswers: CRIT_PAIRS.map(([a,b],i)=>({
-      left: CRITERIA[a].name,
-      right: CRITERIA[b].name,
-      value: SCALE[state.critAnswers[i]],
-      index: state.critAnswers[i]
-    })),
-    optionAnswers: CRITERIA.map((c,i)=>({
-      criterion: c.name,
-      value: SCALE[state.optAnswers[i]],
-      index: state.optAnswers[i]
-    })),
-    criteriaWeights: rows.map(r=>({
-      criterion: r.criteria.name,
-      weight: r.weight
-    })),
-    scoreA,
-    scoreB,
-    consistencyRatio: CR
+  const payload = {
+    "Timestamp": new Date().toISOString(),
+    "Nama": state.profile.name,
+    "Peran": state.profile.role,
   };
+
+  // Kolom per pasangan kriteria, contoh header:
+  // "Kualitas Pengalaman Berlatih vs Keandalan Peralatan & Kontinuitas Layanan"
+  CRIT_PAIRS.forEach(([a,b], i)=>{
+    const leftName = CRITERIA[a].name;
+    const rightName = CRITERIA[b].name;
+    const header = `${leftName} vs ${rightName}`;
+    payload[header] = pairwiseLabel(leftName, rightName, state.critAnswers[i]);
+  });
+
+  // Kolom per kriteria untuk perbandingan Opsi A vs Opsi B, contoh header:
+  // "Opsi A vs Opsi B - Kualitas Pengalaman Berlatih"
+  CRITERIA.forEach((c,i)=>{
+    const header = `Opsi A vs Opsi B - ${c.name}`;
+    payload[header] = pairwiseLabel("Opsi A", "Opsi B", state.optAnswers[i]);
+  });
+
+  // Kolom hasil akhir
+  rows.forEach(r=>{
+    payload[`Bobot - ${r.criteria.name}`] = (r.weight*100).toFixed(1) + "%";
+  });
+  payload["Skor Opsi A"] = (scoreA*100).toFixed(1) + "%";
+  payload["Skor Opsi B"] = (scoreB*100).toFixed(1) + "%";
+  payload["Consistency Ratio"] = CR.toFixed(3);
+
+  return payload;
 }
 
 async function submitToGoogleSheets(payload){
